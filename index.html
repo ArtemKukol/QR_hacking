@@ -9,7 +9,7 @@
 		/>
 		<link rel="stylesheet" href="./css/Norm_block_model.css" />
 		<link rel="stylesheet" href="./css/style.css" />
-		<title>QR → Штрихкод v2</title>
+		<title>Document</title>
 	</head>
 	<body>
 		<style>
@@ -25,13 +25,6 @@
 			#reader {
 				width: 100%;
 				margin-bottom: 16px;
-				/* лёгкий цифровой зум — можно отключить, если не нужен */
-				transform: scale(1.2);
-				transform-origin: top center;
-			}
-			/* чтобы видео не вылезало за рамки при scale */
-			#reader video {
-				object-fit: cover !important;
 			}
 			#barcodeValue {
 				margin-top: 8px;
@@ -44,13 +37,20 @@
 		</style>
 
 		<div class="app">
-			<h2>QR → Штрихкод v9</h2>
+			<h2>QR → Штрихкод v10</h2>
 
 			<div id="reader"></div>
 
-			<div style="margin: 8px 0;">
+			<div style="margin: 8px 0">
 				<label for="zoomRange">Зум:</label>
-				<input id="zoomRange" type="range" min="1" max="3" step="0.1" value="1" />
+				<input
+					id="zoomRange"
+					type="range"
+					min="1"
+					max="3"
+					step="0.1"
+					value="1"
+				/>
 				<span id="zoomValue">1.0x</span>
 			</div>
 
@@ -60,53 +60,79 @@
 
 		<!-- Генератор штрихкода -->
 		<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
-		<!-- QR сканер -->
+		<!-- QR сканер (низкоуровневый Html5Qrcode, не Html5QrcodeScanner) -->
 		<script src="https://unpkg.com/html5-qrcode@2.3.4/html5-qrcode.min.js"></script>
 
 		<script>
 			function extractBarcode(decodedText) {
-				const parts = decodedText.split(";");
+				// ожидаем формат типа: CEN;4607056587934;129.99;1;6;19.02.26
+				const parts = decodedText.split(';');
 				if (parts.length > 1 && /^\d+$/.test(parts[1])) {
 					return parts[1];
 				}
 				return null;
 			}
 
-			let html5QrCodeScanner = null;
+			let html5QrCode = null;
 			let videoTrack = null;
 
+			async function startScanner() {
+				const qrRegionId = 'reader';
+				html5QrCode = new Html5Qrcode(qrRegionId);
+
+				// Стартуем сканер с небольшой областью, чтобы «приблизить» код
+				await html5QrCode.start(
+					{ facingMode: 'environment' },
+					{
+						fps: 15,
+						qrbox: { width: 180, height: 180 }, // меньше, чем 250, даёт больше «зум»
+					},
+					onScanSuccess,
+					onScanError,
+				);
+
+				// Получаем доступ к видеотреку для управления зумом
+				const stream = await navigator.mediaDevices.getUserMedia({
+					video: { facingMode: 'environment' },
+				});
+				videoTrack = stream.getVideoTracks()[0];
+
+				setupZoomControl();
+			}
+
 			function setupZoomControl() {
-				const range = document.getElementById("zoomRange");
-				const valueSpan = document.getElementById("zoomValue");
+				const range = document.getElementById('zoomRange');
+				const valueSpan = document.getElementById('zoomValue');
 
 				if (!videoTrack || !videoTrack.getCapabilities) {
 					range.disabled = true;
-					valueSpan.textContent = "нет зума";
+					valueSpan.textContent = 'нет зума';
 					return;
 				}
 
 				const capabilities = videoTrack.getCapabilities();
 				if (!capabilities.zoom) {
 					range.disabled = true;
-					valueSpan.textContent = "нет зума";
+					valueSpan.textContent = 'нет зума';
 					return;
 				}
 
-				range.min = capabilities.zoom.min.toString();
-				range.max = capabilities.zoom.max.toString();
-				range.step = capabilities.zoom.step || "0.1";
-				range.value = capabilities.zoom.min.toString();
-				valueSpan.textContent = capabilities.zoom.min.toFixed(1) + "x";
+				// Настраиваем слайдер под реальные возможности камеры
+				range.min = capabilities.zoom.min;
+				range.max = capabilities.zoom.max;
+				range.step = capabilities.zoom.step || 0.1;
+				range.value = capabilities.zoom.min;
+				valueSpan.textContent = capabilities.zoom.min.toFixed(1) + 'x';
 
 				range.oninput = async () => {
 					const zoomLevel = parseFloat(range.value);
-					valueSpan.textContent = zoomLevel.toFixed(1) + "x";
+					valueSpan.textContent = zoomLevel.toFixed(1) + 'x';
 					try {
 						await videoTrack.applyConstraints({
-							advanced: [{ zoom: zoomLevel }]
+							advanced: [{ zoom: zoomLevel }],
 						});
 					} catch (e) {
-						console.warn("Не удалось применить зум:", e);
+						console.warn('Не удалось применить зум:', e);
 					}
 				};
 			}
@@ -115,61 +141,39 @@
 				const barcodeNumber = extractBarcode(decodedText);
 
 				if (!barcodeNumber) {
-					console.warn("Не удалось вытащить штрихкод из строки:", decodedText);
-					document.getElementById("barcodeValue").textContent =
-						"Ошибка: не найден штрихкод в данных QR";
+					console.warn('Не удалось вытащить штрихкод из строки:', decodedText);
+					document.getElementById('barcodeValue').textContent =
+						'Ошибка: не найден штрихкод в данных QR';
 					return;
 				}
 
-				JsBarcode("#barcode", barcodeNumber, {
-					format: "CODE128",
-					lineColor: "#000",
+				JsBarcode('#barcode', barcodeNumber, {
+					format: 'CODE128',
+					lineColor: '#000',
 					width: 2,
 					height: 80,
-					displayValue: true
+					displayValue: true,
 				});
 
-				document.getElementById("barcodeValue").textContent = barcodeNumber;
+				document.getElementById('barcodeValue').textContent = barcodeNumber;
+
+				// Если нужно — можно остановить сканер после первого успешного чтения:
+				// html5QrCode.stop().then(() => html5QrCode.clear());
 			}
 
 			function onScanError(errorMessage) {
-				if (!/No MultiFormat Readers were able to detect the code/.test(errorMessage)) {
+				// игнорируем «нет кода на кадре», остальные выводим
+				if (
+					!/No MultiFormat Readers were able to detect the code/.test(
+						errorMessage,
+					)
+				) {
 					console.warn(errorMessage);
 				}
 			}
 
-			document.addEventListener("DOMContentLoaded", () => {
-				// 1. Мы уменьшаем qrbox — это "зум" по области
-				html5QrCodeScanner = new Html5QrcodeScanner(
-					"reader",
-					{
-						fps: 15,
-						qrbox: { width: 120, height: 120 } // 120 вместо 180 — больше зум
-					},
-					false
-				);
-
-				// 2. Вешаем обработчики и UI сканера
-				html5QrCodeScanner.render(onScanSuccess, onScanError);
-
-				// 3. Запускаем камеру, чтобы получить MediaStream и VideoTrack
-				html5QrCodeScanner.start(
-					{ facingMode: "environment" },
-					{
-						fps: 15,
-						qrbox: { width: 120, height: 120 } // тот же 120×120
-					},
-					onScanSuccess,
-					onScanError
-				).then((stream) => {
-					const videoTracks = stream.getVideoTracks();
-					if (videoTracks.length > 0) {
-						videoTrack = videoTracks[0];
-						setupZoomControl();
-					}
-				}).catch(err => {
-					console.error("Ошибка старта камеры:", err);
-				});
+			document.addEventListener('DOMContentLoaded', () => {
+				startScanner().catch(console.error);
 			});
 		</script>
 	</body>
