@@ -1,49 +1,76 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
-<head>
-   <meta charset="UTF-8">
-   <meta http-equiv="X-UA-Compatible" content="IE=edge">
-   <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
-   <link rel="stylesheet" href="./css/Norm_block_model.css">
-   <link rel="stylesheet" href="./css/style.css">
-   <title>Document</title>
-</head>
-<body>
-   
-      <header class="header">
-         <div class="logo">
-            <span>Frontend</span>
-            <span>Кейс</span>
-         </div>
-   
-         <nav class="nav">
-            <ul>
-               <li>Главная</li>
-               <li>Каталог работ</li>
-               <li>Услуги</li>
-               <li>Галерея</li>
-               <li>Отзывы</li>
-               <li>Контакты</li>
-            </ul>
-         </nav>
-   
-         <div class="burger">
-            <span></span>
-         </div>
-      </header>
-   
+	<head>
+		<meta charset="UTF-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta
+			name="viewport"
+			content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0"
+		/>
+		<link rel="stylesheet" href="./css/Norm_block_model.css" />
+		<link rel="stylesheet" href="./css/style.css" />
+		<title>Document</title>
+	</head>
+	<body>
+		<style>
+			body {
+				font-family: sans-serif;
+				margin: 20px;
+			}
+			.app {
+				max-width: 400px;
+				margin: 0 auto;
+				text-align: center;
+			}
+			#reader {
+				width: 100%;
+				margin-bottom: 16px;
+			}
+			#barcodeValue {
+				margin-top: 8px;
+				font-size: 14px;
+				color: #333;
+			}
+		</style>
 
-   <!-- <div class="layout">
-      <header>header</header>
-      <main>main</main>
-      <footer>footer</footer>
-   </div> -->
+		<div class="app">
+			<h2>QR → Штрихкод</h2>
 
-   <script>
-      document.querySelector('.burger').addEventListener('click', function() {
-         this.classList.toggle('active');
-         document.querySelector('.nav').classList.toggle('open');
-      });
-   </script>
-</body>
+			<div id="reader"></div>
+
+			<svg id="barcode"></svg>
+			<div id="barcodeValue"></div>
+		</div>
+
+		<!-- QR сканер -->
+		<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+		<!-- Генератор штрихкода -->
+		<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+
+		<script>
+			function onScanSuccess(decodedText, decodedResult) {
+				// decodedText – строка из QR (например, штрихкод товара)
+				JsBarcode('#barcode', decodedText, {
+					format: 'CODE128', // при необходимости поменяйте формат
+					lineColor: '#000',
+					width: 2,
+					height: 80,
+					displayValue: true,
+				});
+				document.getElementById('barcodeValue').textContent = decodedText;
+			}
+
+			function onScanError(errorMessage) {
+				// можно игнорировать или выводить в консоль
+				console.warn(errorMessage);
+			}
+
+			const html5QrcodeScanner = new Html5QrcodeScanner(
+				'reader',
+				{ fps: 10, qrbox: 250 },
+				false,
+			);
+			html5QrcodeScanner.render(onScanSuccess, onScanError);
+		</script>
+	</body>
 </html>
