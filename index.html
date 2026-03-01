@@ -25,6 +25,13 @@
 			#reader {
 				width: 100%;
 				margin-bottom: 16px;
+				/* лёгкий цифровой зум — можно отключить, если не нужен */
+				transform: scale(1.2);
+				transform-origin: top center;
+			}
+			/* чтобы видео не вылезало за рамки при scale */
+			#reader video {
+				object-fit: cover !important;
 			}
 			#barcodeValue {
 				margin-top: 8px;
@@ -37,7 +44,7 @@
 		</style>
 
 		<div class="app">
-			<h2>QR → Штрихкод v8</h2>
+			<h2>QR → Штрихкод v9</h2>
 
 			<div id="reader"></div>
 
@@ -132,17 +139,17 @@
 			}
 
 			document.addEventListener("DOMContentLoaded", () => {
-				// 1. Создаём сканер с кнопкой "Scan QR" внутри #reader
+				// 1. Мы уменьшаем qrbox — это "зум" по области
 				html5QrCodeScanner = new Html5QrcodeScanner(
 					"reader",
 					{
 						fps: 15,
-						qrbox: { width: 180, height: 180 }
+						qrbox: { width: 120, height: 120 } // 120 вместо 180 — больше зум
 					},
 					false
 				);
 
-				// 2. Вешаем обработчики и запускаем UI со сканером
+				// 2. Вешаем обработчики и UI сканера
 				html5QrCodeScanner.render(onScanSuccess, onScanError);
 
 				// 3. Запускаем камеру, чтобы получить MediaStream и VideoTrack
@@ -150,7 +157,7 @@
 					{ facingMode: "environment" },
 					{
 						fps: 15,
-						qrbox: { width: 180, height: 180 }
+						qrbox: { width: 120, height: 120 } // тот же 120×120
 					},
 					onScanSuccess,
 					onScanError
