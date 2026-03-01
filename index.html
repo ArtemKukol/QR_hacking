@@ -9,7 +9,7 @@
 		/>
 		<link rel="stylesheet" href="./css/Norm_block_model.css" />
 		<link rel="stylesheet" href="./css/style.css" />
-		<title>Document</title>
+		<title>QR → Штрихкод v2</title>
 	</head>
 	<body>
 		<style>
@@ -34,7 +34,7 @@
 		</style>
 
 		<div class="app">
-			<h2>QR → Штрихкод v6</h2>
+			<h2>QR → Штрихкод v7</h2>
 
 			<div id="reader"></div>
 
@@ -57,7 +57,6 @@
 
 		<script>
 			function extractBarcode(decodedText) {
-				// CEN;4607056587934;129.99;1;6;19.02.26
 				const parts = decodedText.split(";");
 				if (parts.length > 1 && /^\d+$/.test(parts[1])) {
 					return parts[1];
@@ -65,23 +64,23 @@
 				return null;
 			}
 
-			let html5QrCodeScanner = null;
+			let html5QrCode = null;
 			let videoTrack = null;
 			let zoomCaps = null;
 
-			function setupZoomButtons(mediaTrack) {
+			function setupZoomButtons() {
 				const btn1 = document.getElementById("zoom1");
 				const btn2 = document.getElementById("zoom2");
 				const btn4 = document.getElementById("zoom4");
 				const valueSpan = document.getElementById("zoomValue");
 
-				if (!mediaTrack || !mediaTrack.getCapabilities) {
+				if (!videoTrack || !videoTrack.getCapabilities) {
 					btn1.disabled = btn2.disabled = btn4.disabled = true;
 					valueSpan.textContent = "нет зума";
 					return;
 				}
 
-				const capabilities = mediaTrack.getCapabilities();
+				const capabilities = videoTrack.getCapabilities();
 				if (!capabilities.zoom) {
 					btn1.disabled = btn2.disabled = btn4.disabled = true;
 					valueSpan.textContent = "нет зума";
@@ -90,7 +89,7 @@
 
 				zoomCaps = capabilities;
 
-				async function setZoom(multiplier) {
+				function setZoom(multiplier) {
 					const min = zoomCaps.min;
 					const max = zoomCaps.max;
 					let target;
@@ -105,14 +104,13 @@
 						target = min;
 					}
 
-					try {
-						await mediaTrack.applyConstraints({
-							advanced: [{ zoom: target }]
-						});
+					videoTrack.applyConstraints({
+						advanced: [{ zoom: target }]
+					}).then(() => {
 						valueSpan.textContent = multiplier + "x";
-					} catch (e) {
+					}).catch(e => {
 						console.warn("Не удалось применить зум:", e);
-					}
+					});
 				}
 
 				btn1.onclick = () => setZoom(1);
@@ -149,22 +147,11 @@
 				}
 			}
 
-			document.addEventListener("DOMContentLoaded", () => {
-				// 1. Создаём новый сканер (с кнопкой "Scan QR" внутри #reader)
-				html5QrCodeScanner = new Html5QrcodeScanner(
-					"reader",
-					{
-						fps: 15,
-						qrbox: { width: 180, height: 180 }
-					},
-					false // не скрываем кнопки
-				);
+			function startQrCodeScanner() {
+				const regionId = "reader";
+				html5QrCode = new Html5Qrcode(regionId);
 
-				// 2. Запускаем сканер с камеры
-				html5QrCodeScanner.render(onScanSuccess, onScanError);
-
-				// 3. После старта камеры получаем VideoTrack для зума
-				html5QrCodeScanner.start(
+				html5QrCode.start(
 					{ facingMode: "environment" },
 					{
 						fps: 15,
@@ -173,11 +160,19 @@
 					onScanSuccess,
 					onScanError
 				).then((stream) => {
-					videoTrack = stream.getVideoTracks()[0];
-					setupZoomButtons(videoTrack);
-				}).catch((err) => {
+					// самый простой способ получить VideoTrack — через MediaStream
+					const tracks = stream.getVideoTracks();
+					if (tracks.length > 0) {
+						videoTrack = tracks[0];
+						setupZoomButtons();
+					}
+				}).catch(err => {
 					console.error("Ошибка старта сканера:", err);
 				});
+			}
+
+			document.addEventListener("DOMContentLoaded", () => {
+				startQrCodeScanner();
 			});
 		</script>
 	</body>
