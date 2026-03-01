@@ -34,7 +34,7 @@
 		</style>
 
 		<div class="app">
-			<h2>QR → Штрихкод v2</h2>
+			<h2>QR → Штрихкод v3</h2>
 
 			<div id="reader"></div>
 
@@ -42,29 +42,53 @@
 			<div id="barcodeValue"></div>
 		</div>
 
-		<!-- QR сканер -->
-		<!-- <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script> -->
 		<!-- Генератор штрихкода -->
 		<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
-    <script src="https://unpkg.com/html5-qrcode@2.3.4/html5-qrcode.min.js"></script>
-
+		<!-- QR сканер -->
+		<script src="https://unpkg.com/html5-qrcode@2.3.4/html5-qrcode.min.js"></script>
 
 		<script>
+			function extractBarcode(decodedText) {
+				// ожидаем формат типа: CEN;4607056587934;129.99;1;6;19.02.26
+				const parts = decodedText.split(';');
+				// parts[0] = "CEN"
+				// parts[1] = "4607056587934" (нужный штрихкод)
+				if (parts.length > 1 && /^\d+$/.test(parts[1])) {
+					return parts[1];
+				}
+				return null;
+			}
+
 			function onScanSuccess(decodedText, decodedResult) {
-				// decodedText – строка из QR (например, штрихкод товара)
-				JsBarcode('#barcode', decodedText, {
-					format: 'CODE128', // при необходимости поменяйте формат
+				const barcodeNumber = extractBarcode(decodedText);
+
+				if (!barcodeNumber) {
+					console.warn('Не удалось вытащить штрихкод из строки:', decodedText);
+					document.getElementById('barcodeValue').textContent =
+						'Ошибка: не найден штрихкод в данных QR';
+					return;
+				}
+
+				JsBarcode('#barcode', barcodeNumber, {
+					format: 'CODE128', // при необходимости поменяй формат
 					lineColor: '#000',
 					width: 2,
 					height: 80,
 					displayValue: true,
 				});
-				document.getElementById('barcodeValue').textContent = decodedText;
+
+				document.getElementById('barcodeValue').textContent = barcodeNumber;
 			}
 
 			function onScanError(errorMessage) {
 				// можно игнорировать или выводить в консоль
-				console.warn(errorMessage);
+				if (
+					!/No MultiFormat Readers were able to detect the code/.test(
+						errorMessage,
+					)
+				) {
+					console.warn(errorMessage);
+				}
 			}
 
 			const html5QrcodeScanner = new Html5QrcodeScanner(
