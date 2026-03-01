@@ -31,12 +31,28 @@
 				font-size: 14px;
 				color: #333;
 			}
+			#zoomRange {
+				width: 100%;
+			}
 		</style>
 
 		<div class="app">
-			<h2>QR → Штрихкод v3</h2>
+			<h2>QR → Штрихкод v4</h2>
 
 			<div id="reader"></div>
+
+			<div style="margin: 8px 0">
+				<label for="zoomRange">Зум:</label>
+				<input
+					id="zoomRange"
+					type="range"
+					min="1"
+					max="3"
+					step="0.1"
+					value="1"
+				/>
+				<span id="zoomValue">1.0x</span>
+			</div>
 
 			<svg id="barcode"></svg>
 			<div id="barcodeValue"></div>
@@ -44,19 +60,81 @@
 
 		<!-- Генератор штрихкода -->
 		<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
-		<!-- QR сканер -->
+		<!-- QR сканер (низкоуровневый Html5Qrcode, не Html5QrcodeScanner) -->
 		<script src="https://unpkg.com/html5-qrcode@2.3.4/html5-qrcode.min.js"></script>
 
 		<script>
 			function extractBarcode(decodedText) {
 				// ожидаем формат типа: CEN;4607056587934;129.99;1;6;19.02.26
 				const parts = decodedText.split(';');
-				// parts[0] = "CEN"
-				// parts[1] = "4607056587934" (нужный штрихкод)
 				if (parts.length > 1 && /^\d+$/.test(parts[1])) {
 					return parts[1];
 				}
 				return null;
+			}
+
+			let html5QrCode = null;
+			let videoTrack = null;
+
+			async function startScanner() {
+				const qrRegionId = 'reader';
+				html5QrCode = new Html5Qrcode(qrRegionId);
+
+				// Стартуем сканер с небольшой областью, чтобы «приблизить» код
+				await html5QrCode.start(
+					{ facingMode: 'environment' },
+					{
+						fps: 15,
+						qrbox: { width: 180, height: 180 }, // меньше, чем 250, даёт больше «зум»
+					},
+					onScanSuccess,
+					onScanError,
+				);
+
+				// Получаем доступ к видеотреку для управления зумом
+				const stream = await navigator.mediaDevices.getUserMedia({
+					video: { facingMode: 'environment' },
+				});
+				videoTrack = stream.getVideoTracks()[0];
+
+				setupZoomControl();
+			}
+
+			function setupZoomControl() {
+				const range = document.getElementById('zoomRange');
+				const valueSpan = document.getElementById('zoomValue');
+
+				if (!videoTrack || !videoTrack.getCapabilities) {
+					range.disabled = true;
+					valueSpan.textContent = 'нет зума';
+					return;
+				}
+
+				const capabilities = videoTrack.getCapabilities();
+				if (!capabilities.zoom) {
+					range.disabled = true;
+					valueSpan.textContent = 'нет зума';
+					return;
+				}
+
+				// Настраиваем слайдер под реальные возможности камеры
+				range.min = capabilities.zoom.min;
+				range.max = capabilities.zoom.max;
+				range.step = capabilities.zoom.step || 0.1;
+				range.value = capabilities.zoom.min;
+				valueSpan.textContent = capabilities.zoom.min.toFixed(1) + 'x';
+
+				range.oninput = async () => {
+					const zoomLevel = parseFloat(range.value);
+					valueSpan.textContent = zoomLevel.toFixed(1) + 'x';
+					try {
+						await videoTrack.applyConstraints({
+							advanced: [{ zoom: zoomLevel }],
+						});
+					} catch (e) {
+						console.warn('Не удалось применить зум:', e);
+					}
+				};
 			}
 
 			function onScanSuccess(decodedText, decodedResult) {
@@ -70,7 +148,7 @@
 				}
 
 				JsBarcode('#barcode', barcodeNumber, {
-					format: 'CODE128', // при необходимости поменяй формат
+					format: 'CODE128',
 					lineColor: '#000',
 					width: 2,
 					height: 80,
@@ -78,10 +156,13 @@
 				});
 
 				document.getElementById('barcodeValue').textContent = barcodeNumber;
+
+				// Если нужно — можно остановить сканер после первого успешного чтения:
+				// html5QrCode.stop().then(() => html5QrCode.clear());
 			}
 
 			function onScanError(errorMessage) {
-				// можно игнорировать или выводить в консоль
+				// игнорируем «нет кода на кадре», остальные выводим
 				if (
 					!/No MultiFormat Readers were able to detect the code/.test(
 						errorMessage,
@@ -91,12 +172,9 @@
 				}
 			}
 
-			const html5QrcodeScanner = new Html5QrcodeScanner(
-				'reader',
-				{ fps: 10, qrbox: 250 },
-				false,
-			);
-			html5QrcodeScanner.render(onScanSuccess, onScanError);
+			document.addEventListener('DOMContentLoaded', () => {
+				startScanner().catch(console.error);
+			});
 		</script>
 	</body>
 </html>
