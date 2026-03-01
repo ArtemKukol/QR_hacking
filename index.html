@@ -31,19 +31,20 @@
 				font-size: 14px;
 				color: #333;
 			}
+			#zoomRange {
+				width: 100%;
+			}
 		</style>
 
 		<div class="app">
-			<h2>QR → Штрихкод v7</h2>
+			<h2>QR → Штрихкод v8</h2>
 
 			<div id="reader"></div>
 
 			<div style="margin: 8px 0;">
-				<span>Зум:</span>
-				<button type="button" id="zoom1">1x</button>
-				<button type="button" id="zoom2">2x</button>
-				<button type="button" id="zoom4">4x</button>
-				<span id="zoomValue">1x</span>
+				<label for="zoomRange">Зум:</label>
+				<input id="zoomRange" type="range" min="1" max="3" step="0.1" value="1" />
+				<span id="zoomValue">1.0x</span>
 			</div>
 
 			<svg id="barcode"></svg>
@@ -64,60 +65,43 @@
 				return null;
 			}
 
-			let html5QrCode = null;
+			let html5QrCodeScanner = null;
 			let videoTrack = null;
-			let zoomCaps = null;
 
-			function setupZoomButtons() {
-				const btn1 = document.getElementById("zoom1");
-				const btn2 = document.getElementById("zoom2");
-				const btn4 = document.getElementById("zoom4");
+			function setupZoomControl() {
+				const range = document.getElementById("zoomRange");
 				const valueSpan = document.getElementById("zoomValue");
 
 				if (!videoTrack || !videoTrack.getCapabilities) {
-					btn1.disabled = btn2.disabled = btn4.disabled = true;
+					range.disabled = true;
 					valueSpan.textContent = "нет зума";
 					return;
 				}
 
 				const capabilities = videoTrack.getCapabilities();
 				if (!capabilities.zoom) {
-					btn1.disabled = btn2.disabled = btn4.disabled = true;
+					range.disabled = true;
 					valueSpan.textContent = "нет зума";
 					return;
 				}
 
-				zoomCaps = capabilities;
+				range.min = capabilities.zoom.min.toString();
+				range.max = capabilities.zoom.max.toString();
+				range.step = capabilities.zoom.step || "0.1";
+				range.value = capabilities.zoom.min.toString();
+				valueSpan.textContent = capabilities.zoom.min.toFixed(1) + "x";
 
-				function setZoom(multiplier) {
-					const min = zoomCaps.min;
-					const max = zoomCaps.max;
-					let target;
-
-					if (multiplier === 1) {
-						target = min;
-					} else if (multiplier === 2) {
-						target = Math.min(max, min * 2);
-					} else if (multiplier === 4) {
-						target = max;
-					} else {
-						target = min;
-					}
-
-					videoTrack.applyConstraints({
-						advanced: [{ zoom: target }]
-					}).then(() => {
-						valueSpan.textContent = multiplier + "x";
-					}).catch(e => {
+				range.oninput = async () => {
+					const zoomLevel = parseFloat(range.value);
+					valueSpan.textContent = zoomLevel.toFixed(1) + "x";
+					try {
+						await videoTrack.applyConstraints({
+							advanced: [{ zoom: zoomLevel }]
+						});
+					} catch (e) {
 						console.warn("Не удалось применить зум:", e);
-					});
-				}
-
-				btn1.onclick = () => setZoom(1);
-				btn2.onclick = () => setZoom(2);
-				btn4.onclick = () => setZoom(4);
-
-				valueSpan.textContent = "1x";
+					}
+				};
 			}
 
 			function onScanSuccess(decodedText, decodedResult) {
@@ -147,11 +131,22 @@
 				}
 			}
 
-			function startQrCodeScanner() {
-				const regionId = "reader";
-				html5QrCode = new Html5Qrcode(regionId);
+			document.addEventListener("DOMContentLoaded", () => {
+				// 1. Создаём сканер с кнопкой "Scan QR" внутри #reader
+				html5QrCodeScanner = new Html5QrcodeScanner(
+					"reader",
+					{
+						fps: 15,
+						qrbox: { width: 180, height: 180 }
+					},
+					false
+				);
 
-				html5QrCode.start(
+				// 2. Вешаем обработчики и запускаем UI со сканером
+				html5QrCodeScanner.render(onScanSuccess, onScanError);
+
+				// 3. Запускаем камеру, чтобы получить MediaStream и VideoTrack
+				html5QrCodeScanner.start(
 					{ facingMode: "environment" },
 					{
 						fps: 15,
@@ -160,19 +155,14 @@
 					onScanSuccess,
 					onScanError
 				).then((stream) => {
-					// самый простой способ получить VideoTrack — через MediaStream
-					const tracks = stream.getVideoTracks();
-					if (tracks.length > 0) {
-						videoTrack = tracks[0];
-						setupZoomButtons();
+					const videoTracks = stream.getVideoTracks();
+					if (videoTracks.length > 0) {
+						videoTrack = videoTracks[0];
+						setupZoomControl();
 					}
 				}).catch(err => {
-					console.error("Ошибка старта сканера:", err);
+					console.error("Ошибка старта камеры:", err);
 				});
-			}
-
-			document.addEventListener("DOMContentLoaded", () => {
-				startQrCodeScanner();
 			});
 		</script>
 	</body>
